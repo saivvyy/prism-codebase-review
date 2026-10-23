@@ -41,6 +41,9 @@ class ConnectedRepo(BaseModel):
     created_at: Optional[str] = None
     pull_requests_count: Optional[int] = None
     open_pr_count: Optional[int] = None
+    status: Optional[str] = "active"
+    is_connected: Optional[bool] = True
+    disconnected_at: Optional[str] = None
 
 
 class GitHubPR(BaseModel):

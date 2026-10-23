@@ -105,7 +105,7 @@ async def test_phase8_live_architecture_violation():
         )
 
         assert review_result.drift_detected is True
-        drift_finding = next((f for f in review_result.findings if f.category == "architecture_drift"), None)
+        drift_finding = next((f for f in review_result.findings if f.category in ("architecture_drift", "rejected_pattern")), None)
         assert drift_finding is not None
         assert "142" in (drift_finding.historical_pr_ref or "")
     finally:

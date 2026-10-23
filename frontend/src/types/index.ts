@@ -11,6 +11,9 @@ export interface ConnectedRepo {
   github_repo_id: number
   default_branch: string
   webhook_active: boolean
+  status?: 'active' | 'disconnected' | string
+  is_connected?: boolean
+  disconnected_at?: string | null
   created_at?: string
   pull_requests_count?: number
   open_pr_count?: number

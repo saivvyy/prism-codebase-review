@@ -62,8 +62,28 @@ class SupabaseService:
         self._local_engineering_memories: Dict[str, Dict[str, Any]] = {}
         self._local_fixes: Dict[str, Dict[str, Any]] = {}
         self._local_learning_candidates: Dict[str, Dict[str, Any]] = {}
+        self._has_lifecycle_columns: Optional[bool] = None
         if self.persist_local:
             self._load_local_state()
+
+    async def _check_lifecycle_columns(self) -> bool:
+        """Determines whether the connected Supabase instance has applied the repository lifecycle migration."""
+        if self._has_lifecycle_columns is not None:
+            return self._has_lifecycle_columns
+        if not self.is_configured:
+            self._has_lifecycle_columns = True
+            return True
+        try:
+            self.client.table("repositories").select("is_connected").limit(1).execute()
+            self._has_lifecycle_columns = True
+        except Exception as e:
+            logger.warning(
+                "Repository lifecycle columns ('is_connected', 'status', 'disconnected_at') not detected on Supabase PostgreSQL: %s. "
+                "Migration '20261023000000_repository_disconnection_lifecycle.sql' is required for durable repository disconnection.",
+                e,
+            )
+            self._has_lifecycle_columns = False
+        return self._has_lifecycle_columns
 
     def _load_local_state(self) -> None:
         """Loads persisted local repository state if available."""
@@ -74,6 +94,11 @@ class SupabaseService:
                 with open(_REPOS_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
+                        for r in data.values():
+                            if isinstance(r, dict):
+                                r.setdefault("is_connected", True)
+                                r.setdefault("status", "active")
+                                r.setdefault("disconnected_at", None)
                         self._local_repos.update(data)
         except Exception as e:
             logger.warning("Could not load local repository state from %s: %s", _REPOS_FILE, e)
@@ -153,9 +178,11 @@ class SupabaseService:
         default_branch: str = "main",
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Saves a connected GitHub repository in Supabase, scoped by user_id."""
+        """Saves or reconnects a GitHub repository in Supabase, scoped by user_id."""
         now = datetime.now(timezone.utc).isoformat()
         effective_user_id = user_id or str(uuid.uuid5(uuid.NAMESPACE_DNS, "prism.default.workspace"))
+        has_cols = await self._check_lifecycle_columns()
+
         if self.is_configured:
             try:
                 await self.ensure_profile(effective_user_id)
@@ -167,6 +194,11 @@ class SupabaseService:
                     "updated_at": now,
                     "user_id": effective_user_id,
                 }
+                if has_cols:
+                    data["is_connected"] = True
+                    data["status"] = "active"
+                    data["disconnected_at"] = None
+
                 res = self.client.table("repositories").upsert(data, on_conflict="user_id,github_repo_id").execute()
                 if res.data:
                     return res.data[0]
@@ -191,6 +223,9 @@ class SupabaseService:
             existing["full_name"] = full_name
             existing["default_branch"] = default_branch
             existing["updated_at"] = now
+            existing["is_connected"] = True
+            existing["status"] = "active"
+            existing["disconnected_at"] = None
             self._save_local_state()
             return existing
 
@@ -202,6 +237,9 @@ class SupabaseService:
             "full_name": full_name,
             "default_branch": default_branch,
             "webhook_active": False,
+            "is_connected": True,
+            "status": "active",
+            "disconnected_at": None,
             "created_at": now,
             "updated_at": now,
         }
@@ -212,10 +250,20 @@ class SupabaseService:
     async def list_repositories(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Lists connected repositories, scoped to a user and shared workspace repositories."""
         allowed_user_ids = [user_id, *DEFAULT_WORKSPACE_UUIDS] if user_id else list(DEFAULT_WORKSPACE_UUIDS)
+        has_cols = await self._check_lifecycle_columns()
+
         if self.is_configured:
             try:
                 query = self.client.table("repositories").select("*")
                 query = query.in_("user_id", allowed_user_ids)
+                if has_cols:
+                    query = query.eq("is_connected", True)
+                else:
+                    logger.warning(
+                        "Supabase schema lacks 'is_connected' column. "
+                        "Migration '20261023000000_repository_disconnection_lifecycle.sql' is missing; "
+                        "returning repositories without lifecycle filtering."
+                    )
                 res = query.order("created_at", desc=True).execute()
                 return res.data or []
             except Exception as e:
@@ -223,27 +271,54 @@ class SupabaseService:
                 raise SupabaseStateError(f"Database error listing repositories: {e}") from e
 
         allowed_set = set(allowed_user_ids) | {"", None}
-        return [r for r in self._local_repos.values() if r.get("user_id") in allowed_set]
+        return [
+            r for r in self._local_repos.values()
+            if r.get("user_id") in allowed_set
+            and r.get("is_connected", True) is not False
+            and r.get("status", "active") != "disconnected"
+        ]
 
-    async def get_repository_by_id(self, repo_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_repository_by_id(
+        self,
+        repo_id: str,
+        user_id: Optional[str] = None,
+        include_disconnected: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         """Retrieves a single repository by UUID or full_name, enforcing user authorization boundaries."""
         allowed_user_ids = [user_id, *DEFAULT_WORKSPACE_UUIDS] if user_id else list(DEFAULT_WORKSPACE_UUIDS)
         allowed_set = set(allowed_user_ids) | {"", None}
+        has_cols = await self._check_lifecycle_columns()
 
         if self.is_configured:
             try:
                 query = self.client.table("repositories").select("*").eq("id", repo_id)
                 query = query.in_("user_id", allowed_user_ids)
+                if not include_disconnected and has_cols:
+                    query = query.eq("is_connected", True)
                 res = query.execute()
                 if res.data:
-                    return res.data[0]
+                    item = res.data[0]
+                    if not include_disconnected:
+                        if not has_cols and item.get("id") in self._disconnected_repo_ids:
+                            return None
+                        if item.get("is_connected") is False or item.get("status") == "disconnected":
+                            return None
+                    return item
 
                 if "/" in repo_id:
                     q2 = self.client.table("repositories").select("*").eq("full_name", repo_id)
                     q2 = q2.in_("user_id", allowed_user_ids)
+                    if not include_disconnected and has_cols:
+                        q2 = q2.eq("is_connected", True)
                     res2 = q2.execute()
                     if res2.data:
-                        return res2.data[0]
+                        item2 = res2.data[0]
+                        if not include_disconnected:
+                            if not has_cols and item2.get("id") in self._disconnected_repo_ids:
+                                return None
+                            if item2.get("is_connected") is False or item2.get("status") == "disconnected":
+                                return None
+                        return item2
 
                 return None
             except Exception as e:
@@ -255,6 +330,9 @@ class SupabaseService:
             repo_owner = found.get("user_id")
             if repo_owner and repo_owner not in allowed_set:
                 return None
+            if not include_disconnected:
+                if found.get("is_connected") is False or found.get("status") == "disconnected":
+                    return None
             return found
 
         # Fallback: If repo_id happens to be an owner/repo full name
@@ -264,15 +342,28 @@ class SupabaseService:
                     repo_owner = r.get("user_id")
                     if repo_owner and repo_owner not in allowed_set:
                         continue
+                    if not include_disconnected:
+                        if r.get("is_connected") is False or r.get("status") == "disconnected":
+                            return None
                     return r
 
         return None
 
-    async def get_repository(self, repo_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_repository(
+        self,
+        repo_id: str,
+        user_id: Optional[str] = None,
+        include_disconnected: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         """Alias for get_repository_by_id."""
-        return await self.get_repository_by_id(repo_id, user_id=user_id)
+        return await self.get_repository_by_id(repo_id, user_id=user_id, include_disconnected=include_disconnected)
 
-    async def get_repository_by_name(self, full_name: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_repository_by_name(
+        self,
+        full_name: str,
+        user_id: Optional[str] = None,
+        include_disconnected: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         """Retrieves a single repository by full_name ('owner/repo') enforcing user authorization boundaries."""
         default_unauth_uuids = [
             str(uuid.uuid5(uuid.NAMESPACE_DNS, "prism.default.workspace")),
@@ -280,6 +371,8 @@ class SupabaseService:
             "754ce586-15a7-54c3-9230-797e25c39fae",
         ]
         default_unauth_ids = set(default_unauth_uuids) | {"", None}
+        has_cols = await self._check_lifecycle_columns()
+
         if self.is_configured:
             try:
                 query = self.client.table("repositories").select("*").eq("full_name", full_name)
@@ -287,8 +380,18 @@ class SupabaseService:
                     query = query.eq("user_id", user_id)
                 else:
                     query = query.in_("user_id", default_unauth_uuids)
+                if not include_disconnected and has_cols:
+                    query = query.eq("is_connected", True)
                 res = query.execute()
-                return res.data[0] if res.data else None
+                if res.data:
+                    item = res.data[0]
+                    if not include_disconnected:
+                        if not has_cols and item.get("id") in self._disconnected_repo_ids:
+                            return None
+                        if item.get("is_connected") is False or item.get("status") == "disconnected":
+                            return None
+                    return item
+                return None
             except Exception as e:
                 logger.error("Supabase get repository by name error: %s", e)
                 raise SupabaseStateError(f"Database error fetching repository by name: {e}") from e
@@ -299,18 +402,117 @@ class SupabaseService:
                 if r.get("full_name") == full_name and (
                     (r.get("user_id") == user_id) if user_id else (not r.get("user_id") or r.get("user_id") in default_unauth_ids)
                 )
+                and (include_disconnected or (r.get("is_connected", True) is not False and r.get("status", "active") != "disconnected"))
             ),
             None,
         )
 
+    async def disconnect_repository(self, repo_id: str, user_id: Optional[str] = None) -> bool:
+        """Safely disconnects a repository from PRism monitoring, preserving engineering memory.
+
+        Preserves all canonical engineering memories, pull requests, reviews, and findings
+        in PostgreSQL and Hindsight. Reconnecting this repository restores full access to
+        historical engineering memory and reviews.
+        """
+        allowed_user_ids = [user_id, *DEFAULT_WORKSPACE_UUIDS] if user_id else list(DEFAULT_WORKSPACE_UUIDS)
+        allowed_set = set(allowed_user_ids) | {"", None}
+        now = datetime.now(timezone.utc).isoformat()
+        has_cols = await self._check_lifecycle_columns()
+
+        if self.is_configured:
+            try:
+                existing = await self.get_repository_by_id(repo_id, user_id=user_id, include_disconnected=True)
+                if not existing:
+                    return False
+                owner_id = existing.get("user_id")
+                if user_id and owner_id and owner_id not in allowed_set:
+                    return False
+
+                if not has_cols:
+                    logger.error(
+                        "Cannot disconnect repository %s: live Supabase schema is missing required lifecycle columns. "
+                        "Migration 'supabase/migrations/20261023000000_repository_disconnection_lifecycle.sql' has not been applied.",
+                        repo_id,
+                    )
+                    raise SupabaseStateError(
+                        "Repository disconnection cannot be durably persisted: "
+                        "The required database migration '20261023000000_repository_disconnection_lifecycle.sql' "
+                        "has not been applied to Supabase PostgreSQL. Columns 'is_connected', 'status', "
+                        "and 'disconnected_at' are missing from public.repositories."
+                    )
+
+                # Soft disconnection: deactivate connection & webhooks without touching memories or reviews
+                update_payload: Dict[str, Any] = {
+                    "is_connected": False,
+                    "status": "disconnected",
+                    "disconnected_at": now,
+                    "webhook_active": False,
+                    "updated_at": now,
+                }
+                query = self.client.table("repositories").update(update_payload).eq("id", repo_id)
+                if owner_id:
+                    query = query.eq("user_id", owner_id)
+                res = query.execute()
+
+                if repo_id in self._local_repos:
+                    self._local_repos[repo_id]["is_connected"] = False
+                    self._local_repos[repo_id]["status"] = "disconnected"
+                    self._local_repos[repo_id]["disconnected_at"] = now
+                    self._local_repos[repo_id]["webhook_active"] = False
+                    self._local_repos[repo_id]["updated_at"] = now
+                    self._save_local_state()
+
+                return True
+            except Exception as e:
+                logger.error("Supabase disconnect repository error: %s", e)
+                raise SupabaseStateError(f"Database error disconnecting repository: {e}") from e
+
+        if repo_id in self._local_repos:
+            repo = self._local_repos[repo_id]
+            repo_owner = repo.get("user_id")
+            if user_id and repo_owner and repo_owner not in allowed_set:
+                return False
+
+            repo["is_connected"] = False
+            repo["status"] = "disconnected"
+            repo["disconnected_at"] = now
+            repo["webhook_active"] = False
+            repo["updated_at"] = now
+            self._save_local_state()
+
+            # ARCHITECTURAL INVARIANT: DO NOT DELETE dependent PRs, reviews, or engineering memories!
+            # They remain durable and are restored upon reconnection.
+            return True
+
+        return False
+
     async def delete_repository(self, repo_id: str, user_id: Optional[str] = None) -> bool:
-        """Deletes/disconnects a repository from persistence, verifying user ownership if scoped."""
+        """Disconnects a repository from active monitoring.
+
+        Aliases to disconnect_repository to ensure engineering memories and review history
+        are NEVER inadvertently erased via repository deletion requests.
+        """
+        return await self.disconnect_repository(repo_id, user_id=user_id)
+
+    async def purge_repository_permanently(
+        self,
+        repo_id: str,
+        user_id: Optional[str] = None,
+        confirm: bool = False,
+    ) -> bool:
+        """Explicit, separate permanent purge operation.
+
+        CRITICAL: MUST NOT be called via the disconnect endpoint.
+        Requires confirm=True to prevent accidental erasure of engineering memory.
+        """
+        if not confirm:
+            raise ValueError("Permanent deletion requires explicit confirm=True")
         allowed_user_ids = [user_id, *DEFAULT_WORKSPACE_UUIDS] if user_id else list(DEFAULT_WORKSPACE_UUIDS)
         allowed_set = set(allowed_user_ids) | {"", None}
 
         if self.is_configured:
             try:
-                existing = await self.get_repository_by_id(repo_id, user_id=user_id)
+                existing = await self.get_repository_by_id(repo_id, user_id=user_id, include_disconnected=True)
                 if not existing:
                     return False
                 owner_id = existing.get("user_id")
@@ -321,20 +523,13 @@ class SupabaseService:
                 if owner_id:
                     query = query.eq("user_id", owner_id)
                 res = query.execute()
-
-                deleted_data = getattr(res, "data", None)
-                count = getattr(res, "count", None)
-                if not deleted_data and (count is None or count == 0):
-                    logger.warning("Supabase delete affected 0 rows for repo %s (owner=%s)", repo_id, owner_id)
-                    return False
-
                 if repo_id in self._local_repos:
                     del self._local_repos[repo_id]
                     self._save_local_state()
                 return True
             except Exception as e:
-                logger.error("Supabase delete error: %s", e)
-                raise SupabaseStateError(f"Database error deleting repository: {e}") from e
+                logger.error("Supabase permanent purge error: %s", e)
+                raise SupabaseStateError(f"Database error during permanent purge: {e}") from e
 
         if repo_id in self._local_repos:
             repo = self._local_repos[repo_id]
@@ -343,13 +538,6 @@ class SupabaseService:
                 return False
             del self._local_repos[repo_id]
             self._save_local_state()
-            # Clean up local dependent data (mirroring database foreign key cascades)
-            pr_keys = [k for k, p in self._local_prs.items() if p.get("repository_id") == repo_id]
-            for k in pr_keys:
-                del self._local_prs[k]
-            mem_ids = [m_id for m_id, m in self._local_engineering_memories.items() if m.get("repository_id") == repo_id]
-            for m_id in mem_ids:
-                del self._local_engineering_memories[m_id]
             return True
         return False
 

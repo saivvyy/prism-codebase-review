@@ -1,0 +1,142 @@
+# ========================================
+# Environment / Secrets
+# ========================================
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+!*.env.example
+
+# Credentials / private keys
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+tokens.json
+
+
+# ========================================
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+env/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.coverage
+coverage/
+htmlcov/
+
+*.egg-info/
+.eggs/
+
+
+# ========================================
+# Node / Frontend
+# ========================================
+node_modules/
+
+dist/
+build/
+out/
+
+.next/
+.nuxt/
+.vite/
+.turbo/
+
+.eslintcache
+.parcel-cache/
+.sass-cache/
+
+
+# ========================================
+# IDE
+# ========================================
+.vscode/
+.idea/
+
+*.swp
+*.swo
+*.swn
+
+
+# ========================================
+# OS
+# ========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+
+# ========================================
+# Logs
+# ========================================
+*.log
+logs/
+
+
+# ========================================
+# Temporary / Scratch
+# ========================================
+*.tmp
+*.temp
+*.bak
+*.old
+
+tmp/
+temp/
+scratch/
+backend/benchmark_*.py
+backend/measure_*.py
+backend/verify_*.py
+
+
+# ========================================
+# Local databases / runtime state
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+
+backend/data/
+backend/data/*.json
+backend/data/local_repositories.json
+backend/data/local_sessions.json
+
+
+# ========================================
+# Supabase local CLI state
+# ========================================
+supabase/.temp/
+
+
+# ========================================
+# Generated artifacts
+# ========================================
+artifacts/
+reports/
+generated/
+
+
+# ========================================
+# Profiling / debugging
+# ========================================
+*.prof
+*.trace
+
+# Agent / local AI tooling
+.agents/
+
+# Local development files
+architecture.txt

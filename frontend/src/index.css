@@ -1,0 +1,480 @@
+@import "tailwindcss";
+
+:root {
+  --color-canvas-default: #0d1117;
+  --color-canvas-subtle: #161b22;
+  --color-canvas-overlay: #1c2128;
+  --color-canvas-inset: #010409;
+  --color-border-default: #30363d;
+  --color-border-muted: #21262d;
+  --color-fg-default: #f0f6fc;
+  --color-fg-muted: #9198a1;
+  --color-fg-subtle: #656c76;
+  --color-accent-fg: #4493f8;
+  --color-accent-emphasis: #1f6feb;
+  --color-success-fg: #3fb950;
+  --color-success-emphasis: #238636;
+  --color-attention-fg: #d29922;
+  --color-attention-muted: rgba(210, 153, 34, 0.15);
+  --color-danger-fg: #f85149;
+  --color-danger-emphasis: #da3633;
+  --color-done-fg: #ab7df8;
+  --color-done-emphasis: #8957e5;
+  --color-primer-border-active: #f78166;
+
+  /* Primer Button Primary Tokens (GitHub Dark Theme) */
+  --button-primary-bgColor-rest: #238636;
+  --button-primary-bgColor-hover: #29903b;
+  --button-primary-bgColor-active: #2e9a40;
+  --button-primary-bgColor-disabled: #105823;
+  --button-primary-borderColor-rest: rgba(255, 255, 255, 0.15);
+  --button-primary-borderColor-hover: rgba(255, 255, 255, 0.15);
+  --button-primary-borderColor-active: rgba(255, 255, 255, 0.15);
+  --button-primary-borderColor-disabled: #105823;
+  --button-primary-fgColor-rest: #ffffff;
+  --button-primary-fgColor-disabled: rgba(255, 255, 255, 0.4);
+  --button-primary-iconColor-rest: #ffffff;
+  --button-primary-iconColor-disabled: rgba(255, 255, 255, 0.4);
+
+  /* Primer Motion / Spinner Tokens */
+  --base-duration-1000: 1000ms;
+  --base-easing-linear: linear;
+
+  color-scheme: dark;
+}
+
+/* Ensure Primer Spinner rotates reliably in all browser environments */
+[data-component="Spinner"] svg,
+[class*="SpinnerAnimation"] {
+  animation: prc-Spinner-rotate-keyframes-LV51p 1s linear infinite !important;
+}
+@keyframes prc-Spinner-rotate-keyframes-LV51p {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Ensure Primer Primary Buttons retain crisp white foreground even within <a>/BaseStyles */
+[data-variant="primary"],
+[data-variant="primary"] * {
+  color: var(--button-primary-fgColor-rest, #ffffff) !important;
+}
+[data-variant="primary"] svg:not([data-component="loadingSpinner"] svg):not([class*="Spinner"]) {
+  fill: currentColor !important;
+}
+
+/* Repository UnderlineNav: suppress text underline on hover while preserving active bottom border indicator */
+.repo-nav a,
+.repo-nav a:hover,
+.repo-nav a:focus,
+.repo-nav a:active {
+  text-decoration: none !important;
+}
+
+/* Sidebar Navigation: disable text-decoration underlines across all states */
+.sidebar-nav a,
+.sidebar-nav a:hover,
+.sidebar-nav a:focus,
+.sidebar-nav a:active,
+.sidebar-nav a:visited,
+.sidebar-nav a *,
+.sidebar-nav a:hover * {
+  text-decoration: none !important;
+}
+
+/* Public Landing Page: suppress text underline on hover while preserving color/opacity transitions */
+.landing-page a,
+.landing-page a:hover,
+.landing-page a:focus,
+.landing-page a:active,
+.landing-page a:visited,
+.landing-page a *,
+.landing-page a:hover * {
+  text-decoration: none !important;
+}
+
+/* Ensure accessible focus indicator remains visible on interactive landing page elements */
+.landing-page a:focus-visible,
+.landing-page button:focus-visible {
+  outline: 2px solid #58a6ff !important;
+  outline-offset: 2px !important;
+}
+
+/* Header Brand Link: ensure brand mark and text never show text-decoration underline on hover */
+.header-brand-link,
+.header-brand-link:hover,
+.header-brand-link:focus,
+.header-brand-link:active,
+.header-brand-link:visited,
+.header-brand-link *,
+.header-brand-link:hover * {
+  text-decoration: none !important;
+}
+
+.header-brand-link:focus-visible {
+  outline: 2px solid #58a6ff !important;
+  outline-offset: 2px !important;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-canvas-default);
+  color: var(--color-fg-default);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace restricted STRICTLY to code, diffs, hashes, and technical literals */
+code, pre, .font-mono, .blob-code, .commit-sha {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+/* GitHub-styled subtle scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-canvas-inset);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* GitHub Diff Line Highlighting */
+.diff-line-add {
+  background-color: rgba(63, 185, 80, 0.15);
+  border-left: 3px solid #3fb950;
+}
+
+.diff-line-del {
+  background-color: rgba(248, 81, 73, 0.15);
+  border-left: 3px solid #f85149;
+}
+
+.diff-line-hunk {
+  background-color: rgba(56, 139, 253, 0.1);
+  color: #79c0ff;
+}
+
+/* =====================================================================
+   PRism Landing Page Subtle Micro-Interactions & Transitions
+   ===================================================================== */
+
+/* Subtle logo ambient glow - restrained, transitions smoothly on hover */
+.prism-logo-glow-fx {
+  filter: drop-shadow(0 0 6px rgba(88, 166, 255, 0.18));
+  transition: filter 200ms ease, transform 200ms ease;
+  will-change: filter, transform;
+}
+
+.group:hover .prism-logo-glow-fx,
+.prism-logo-glow-fx:hover {
+  filter: drop-shadow(0 0 10px rgba(88, 166, 255, 0.42)) drop-shadow(0 0 16px rgba(187, 128, 255, 0.22));
+  transform: scale(1.03);
+}
+
+/* Hero Headline - Clean solid white typography with subtle depth */
+.prism-hero-headline {
+  color: #f0f6fc;
+  cursor: default;
+  transition: transform 250ms ease-out, filter 250ms ease-out;
+  will-change: transform, filter;
+}
+
+.prism-hero-headline:hover {
+  transform: translate3d(0, -1px, 0);
+  filter: brightness(1.06);
+}
+
+/* Restrained static blue ambient glow behind "THAT REMEMBERS." */
+.prism-headline-glow {
+  color: #f0f6fc;
+  position: relative;
+  display: inline-block;
+  text-shadow: 0 0 24px rgba(88, 166, 255, 0.22), 0 0 40px rgba(56, 139, 253, 0.12);
+  transition: text-shadow 250ms ease-out;
+}
+
+.prism-hero-headline:hover .prism-headline-glow {
+  text-shadow: 0 0 30px rgba(88, 166, 255, 0.35), 0 0 48px rgba(56, 139, 253, 0.2);
+}
+
+/* Subtle one-time initial light sweep - temporary brightness increase only, no gradient */
+@keyframes prism-headline-sweep {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.12);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* Hero entrance fade & gentle slide upward */
+@keyframes prism-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.prism-headline-entrance {
+  animation: prism-fade-up 550ms ease-out both, prism-headline-sweep 700ms ease-out 300ms 1;
+}
+
+/* Product Badge hover polish */
+.prism-badge {
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.prism-badge:hover {
+  border-color: rgba(88, 166, 255, 0.4);
+  background-color: #1c2128;
+  box-shadow: 0 2px 10px rgba(1, 4, 9, 0.5);
+}
+
+.prism-badge:hover .prism-badge-dot {
+  box-shadow: 0 0 10px #3fb950;
+}
+
+/* Hero initial entrance animation classes with subtle staggers */
+.prism-entrance-1 {
+  animation: prism-fade-up 450ms ease-out both;
+}
+.prism-entrance-2 {
+  animation: prism-fade-up 550ms ease-out 80ms both;
+}
+.prism-entrance-3 {
+  animation: prism-fade-up 500ms ease-out 180ms both;
+}
+.prism-entrance-4 {
+  animation: prism-fade-up 500ms ease-out 260ms both;
+}
+.prism-entrance-5 {
+  animation: prism-fade-up 500ms ease-out 340ms both;
+}
+
+/* Navigation link subtle micro-interaction */
+.prism-nav-link {
+  position: relative;
+  color: #8b949e;
+  transition: color 180ms ease;
+  padding: 4px 0;
+  display: inline-block;
+}
+
+.prism-nav-link::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #58a6ff;
+  border-radius: 1px;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+  opacity: 0;
+}
+
+.prism-nav-link:hover {
+  color: #f0f6fc;
+}
+
+.prism-nav-link:hover::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+/* Scroll reveal class driven by IntersectionObserver */
+.prism-reveal-section {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity 650ms cubic-bezier(0.16, 1, 0.3, 1), transform 650ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.prism-reveal-section.is-revealed {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Interactive Card subtle border illumination, elevation, and icon micro-interaction */
+.prism-card-interactive {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 220ms ease,
+              box-shadow 220ms ease,
+              background-color 220ms ease;
+  will-change: transform, border-color, box-shadow;
+}
+
+.prism-card-interactive:hover {
+  transform: translate3d(0, -2px, 0);
+  border-color: rgba(88, 166, 255, 0.35);
+  box-shadow: 0 6px 18px -2px rgba(1, 4, 9, 0.7),
+              0 0 12px -2px rgba(88, 166, 255, 0.08);
+  background-color: #0b0f14;
+}
+
+.prism-card-interactive svg {
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), filter 200ms ease;
+  transform-origin: center;
+}
+
+.prism-card-interactive:hover svg {
+  transform: scale(1.05);
+  filter: brightness(1.15);
+}
+
+/* Primary CTA hover micro-lift, green glow, arrow shift, and active press */
+.prism-primary-cta {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms ease,
+              background-color 150ms ease,
+              filter 180ms ease;
+  will-change: transform, box-shadow;
+}
+
+.prism-primary-cta:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+  filter: brightness(1.04);
+  box-shadow: 0 4px 14px rgba(35, 134, 54, 0.35), 0 0 16px rgba(63, 185, 80, 0.2);
+}
+
+.prism-primary-cta:hover:not(:disabled) .prism-cta-arrow {
+  transform: translate3d(3.5px, 0, 0);
+}
+
+.prism-primary-cta:active:not(:disabled) {
+  transform: translate3d(0, 0, 0);
+  box-shadow: 0 2px 6px rgba(35, 134, 54, 0.25);
+}
+
+.prism-primary-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #010409, 0 0 0 4px #3fb950;
+}
+
+.prism-cta-arrow {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-block;
+}
+
+/* Secondary CTA hover micro-lift, border glow, and active press */
+.prism-secondary-cta {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms ease,
+              background-color 180ms ease,
+              box-shadow 180ms ease,
+              color 180ms ease;
+  will-change: transform, border-color, box-shadow;
+}
+
+.prism-secondary-cta:hover {
+  transform: translate3d(0, -1px, 0);
+  background-color: #262c36;
+  border-color: rgba(88, 166, 255, 0.38);
+  color: #f0f6fc;
+  box-shadow: 0 3px 12px rgba(1, 4, 9, 0.6), 0 0 12px rgba(88, 166, 255, 0.1);
+}
+
+.prism-secondary-cta:active {
+  transform: translate3d(0, 0, 0);
+}
+
+.prism-secondary-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #010409, 0 0 0 4px #58a6ff;
+}
+
+/* Interactive Product Preview frame depth and subtle spectral rim */
+.prism-preview-frame {
+  position: relative;
+  transition: box-shadow 250ms ease, border-color 250ms ease, transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 16px 40px -6px rgba(1, 4, 9, 0.85);
+  transform-style: preserve-3d;
+  will-change: transform, box-shadow;
+}
+
+.prism-preview-frame::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(187, 128, 255, 0.2), rgba(247, 129, 102, 0.18), rgba(63, 185, 80, 0.12));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: destination-out;
+  pointer-events: none;
+  opacity: 0.5;
+  transition: opacity 300ms ease;
+}
+
+.prism-preview-frame:hover {
+  transform: translate3d(0, -1.5px, 0);
+  border-color: rgba(88, 166, 255, 0.32);
+  box-shadow: 0 20px 48px -4px rgba(1, 4, 9, 0.95), 0 0 20px -2px rgba(88, 166, 255, 0.12);
+}
+
+.prism-preview-frame:hover::before {
+  opacity: 0.85;
+}
+
+/* Accessibility: Full reduced-motion cancellation */
+@media (prefers-reduced-motion: reduce) {
+  .prism-hero-headline,
+  .prism-headline-entrance,
+  .prism-logo-glow-fx,
+  .prism-entrance-1,
+  .prism-entrance-2,
+  .prism-entrance-3,
+  .prism-entrance-4,
+  .prism-entrance-5,
+  .prism-reveal-section,
+  .prism-nav-link::after,
+  .prism-preview-frame,
+  .prism-cta-arrow,
+  .prism-card-interactive svg,
+  .prism-badge,
+  .prism-bridge-row * {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+
+  .prism-hero-headline:hover,
+  .prism-card-interactive:hover,
+  .prism-primary-cta:hover,
+  .prism-secondary-cta:hover,
+  .prism-preview-frame:hover,
+  .prism-card-interactive:hover svg,
+  .prism-badge:hover {
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+

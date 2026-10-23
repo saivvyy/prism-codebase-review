@@ -98,7 +98,8 @@ export const RepositoriesPage: React.FC = () => {
       // Immediately remove from context state, active repo, and isolate caches
       removeRepository(repoId)
       setConnectSuccess(`Disconnected ${fullName}.`)
-      // Do NOT trigger refreshRepos here - it can reintroduce stale state and prevents clean empty state
+      // Refresh repository queries to ensure state stays authoritative
+      await refreshRepos(false)
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : 'Failed to disconnect repository')
     } finally {

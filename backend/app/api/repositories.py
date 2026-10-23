@@ -407,7 +407,7 @@ async def disconnect_repository(
     current_user: Optional[UserSessionProfile] = Depends(get_optional_current_user),
     supabase: SupabaseService = Depends(get_supabase_service),
 ):
-    """Disconnects and removes a repository from monitoring, scoped to user."""
+    """Disconnects and removes a repository from monitoring, scoped to authenticated user."""
     try:
         uuid.UUID(repo_id)
     except (ValueError, AttributeError):
@@ -415,8 +415,19 @@ async def disconnect_repository(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid repository ID format: '{repo_id}'",
         )
-    user_id = current_user.id if current_user else None
-    deleted = await supabase.delete_repository(repo_id, user_id=user_id)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to disconnect repositories.",
+        )
+    try:
+        deleted = await supabase.delete_repository(repo_id, user_id=current_user.id)
+    except Exception as e:
+        logger.error("Database failure while deleting repository %s: %s", repo_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database failure while disconnecting repository: {e}",
+        )
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

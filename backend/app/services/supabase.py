@@ -305,15 +305,29 @@ class SupabaseService:
 
     async def delete_repository(self, repo_id: str, user_id: Optional[str] = None) -> bool:
         """Deletes/disconnects a repository from persistence, verifying user ownership if scoped."""
+        allowed_user_ids = [user_id, *DEFAULT_WORKSPACE_UUIDS] if user_id else list(DEFAULT_WORKSPACE_UUIDS)
+        allowed_set = set(allowed_user_ids) | {"", None}
+
         if self.is_configured:
             try:
                 existing = await self.get_repository_by_id(repo_id, user_id=user_id)
                 if not existing:
                     return False
-                query = self.client.table("repositories").delete().eq("id", repo_id)
-                if user_id:
-                    query = query.eq("user_id", user_id)
-                query.execute()
+                owner_id = existing.get("user_id")
+                if user_id and owner_id and owner_id not in allowed_set:
+                    return False
+
+                query = self.client.table("repositories").delete(count="exact").eq("id", repo_id)
+                if owner_id:
+                    query = query.eq("user_id", owner_id)
+                res = query.execute()
+
+                deleted_data = getattr(res, "data", None)
+                count = getattr(res, "count", None)
+                if not deleted_data and (count is None or count == 0):
+                    logger.warning("Supabase delete affected 0 rows for repo %s (owner=%s)", repo_id, owner_id)
+                    return False
+
                 if repo_id in self._local_repos:
                     del self._local_repos[repo_id]
                     self._save_local_state()
@@ -321,12 +335,21 @@ class SupabaseService:
             except Exception as e:
                 logger.error("Supabase delete error: %s", e)
                 raise SupabaseStateError(f"Database error deleting repository: {e}") from e
+
         if repo_id in self._local_repos:
             repo = self._local_repos[repo_id]
-            if user_id and repo.get("user_id") and repo.get("user_id") != user_id:
+            repo_owner = repo.get("user_id")
+            if user_id and repo_owner and repo_owner not in allowed_set:
                 return False
             del self._local_repos[repo_id]
             self._save_local_state()
+            # Clean up local dependent data (mirroring database foreign key cascades)
+            pr_keys = [k for k, p in self._local_prs.items() if p.get("repository_id") == repo_id]
+            for k in pr_keys:
+                del self._local_prs[k]
+            mem_ids = [m_id for m_id, m in self._local_engineering_memories.items() if m.get("repository_id") == repo_id]
+            for m_id in mem_ids:
+                del self._local_engineering_memories[m_id]
             return True
         return False
 
